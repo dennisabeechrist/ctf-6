@@ -1,57 +1,53 @@
-import { NextRequest, NextResponse } from "next/server";
+// In your /app/api/scores/route.ts (for Next.js API route)
+import { NextRequest } from "next/server";
 
-// Admin defaults
-const ADMIN_NAME = "Admin";
-const ADMIN_SCORE = 9999;
+const ADMIN = { user: "Admin", score: 9999 };
 
-// Read flag from environment variable (set in Vercel)
-const FLAG = process.env.FLAG || "hackpulse{arcade_master_default}";
+// Store leaderboard in memory for demo; replace with DB for persistence.
+let leaderboard = [ADMIN];
 
-// Helper: parse score safely
-function parseScore(score: string | null): number | null {
-  if (!score) return null;
-  const n = Number(score);
-  return Number.isFinite(n) ? n : null;
+function addScore(name: string, score: number) {
+  leaderboard = leaderboard.filter(e => e.user !== name); // Remove duplicate by name
+  leaderboard.push({ user: name, score });
+  leaderboard.sort((a, b) => b.score - a.score);
+  leaderboard = leaderboard.slice(0, 10);
 }
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
+  const name = url.searchParams.get("name");
+  const scoreStr = url.searchParams.get("score");
+  const magic = url.searchParams.get("magic"); // Our hidden challenge param
 
-  const nameParam = url.searchParams.get("name");
-  const scoreParam = url.searchParams.get("score");
+  let message = "Beat Admin to get the flag!";
+  let flag = undefined;
+  let note = undefined;
 
-  const submittedScore = parseScore(scoreParam);
-  const submittedName = nameParam?.slice(0, 24) || null;
+  // Allow score manipulation for fun, but need 'magic' for flag
+  if (name && scoreStr) {
+    const score = Number(scoreStr);
+    if (!Number.isFinite(score) || score < 0) {
+      message = "Invalid score.";
+    } else {
+      addScore(name, score);
 
-  // Base leaderboard (in-memory array)
-  const leaderboard: Array<{ user: string; score: number }> = [
-    { user: ADMIN_NAME, score: ADMIN_SCORE },
-    { user: "Player1", score: 500 },
-    { user: "Player2", score: 300 }
-  ];
-
-  // Vulnerable: blindly add user-submitted score
-  if (submittedName && submittedScore !== null) {
-    leaderboard.push({ user: submittedName, score: submittedScore });
+      if (score > ADMIN.score && magic === "ctf2025") {
+        flag = "CTF{score_manipulation_master}";
+        note =
+          "You found the secret! The flag is only awarded if you submit a very high score AND the hidden query param 'magic=ctf2025'.";
+        message = "Congrats, you beat Admin and found the twist!";
+      } else if (score > ADMIN.score) {
+        note =
+          "You beat Admin, but something is missing…";
+        message = "Keep looking for a secret parameter or special trick!";
+      }
+    }
   }
 
-  // Sort descending
-  leaderboard.sort((a, b) => b.score - a.score);
-
-  const top = leaderboard[0];
-  const isWinner = top.user !== ADMIN_NAME && top.score > ADMIN_SCORE;
-
-  const responseBody: Record<string, unknown> = {
+  return Response.json({
     leaderboard,
-    message:
-      "Submit your name & score as query params (e.g., /api/scores?name=you&score=10000). Beat Admin to win!"
-  };
-
-  if (isWinner) {
-    responseBody.flag = FLAG;
-    responseBody.note =
-      "Congrats! Your score tops the leaderboard. (This endpoint trusts client input deliberately.)";
-  }
-
-  return NextResponse.json(responseBody);
+    message,
+    flag,
+    note,
+  });
 }
