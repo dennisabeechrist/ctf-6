@@ -5,22 +5,22 @@ import { useEffect, useState, useRef } from "react";
 type Entry = { user: string; score: number };
 type ApiResp = { leaderboard: Entry[]; message?: string; flag?: string };
 
-export default function ArcadeGame() {
+export default function CtfArcadeGame() {
   const [leaderboard, setLeaderboard] = useState<Entry[]>([]);
   const [score, setScore] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(30); // seconds game duration
+  const [timeLeft, setTimeLeft] = useState(30);
   const [gameActive, setGameActive] = useState(false);
   const [flag, setFlag] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [user, setUser] = useState("");
-  const [targetPosition, setTargetPosition] = useState({ top: "40%", left: "40%" });
-  
-  const intervalRef = useRef<NodeJS.Timer | null>(null);
+  const [targetPos, setTargetPos] = useState({ top: "40%", left: "40%" });
 
-  // Fetch the leaderboard on mount
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // On mount fetch leaderboard
   useEffect(() => {
     fetch("/api/scores")
-      .then(res => res.json())
+      .then((res) => res.json())
       .then((data: ApiResp) => {
         setLeaderboard(data.leaderboard);
         if(data.message) setMessage(data.message);
@@ -30,19 +30,18 @@ export default function ArcadeGame() {
   // Timer countdown
   useEffect(() => {
     if (gameActive && timeLeft > 0) {
-      intervalRef.current = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
+      timerRef.current = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
     } else if (timeLeft === 0 && gameActive) {
-      endGame();
+      finishGame();
     }
-
     return () => {
-      if (intervalRef.current) clearTimeout(intervalRef.current);
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [timeLeft, gameActive]);
 
   function startGame() {
     if (!user.trim()) {
-      setMessage("Please enter a player name to start.");
+      setMessage("Please enter your player name.");
       return;
     }
     setMessage("");
@@ -53,18 +52,18 @@ export default function ArcadeGame() {
     moveTarget();
   }
 
-  function endGame() {
+  function finishGame() {
     setGameActive(false);
     submitScore();
   }
 
   function moveTarget() {
-    const top = Math.floor(Math.random() * 70) + 10 + "%"; // between 10% and 80%
-    const left = Math.floor(Math.random() * 70) + 10 + "%";
-    setTargetPosition({ top, left });
+    const top = Math.floor(Math.random() * 70 + 10) + "%";
+    const left = Math.floor(Math.random() * 70 + 10) + "%";
+    setTargetPos({ top, left });
   }
 
-  function handleClickTarget() {
+  function handleDotClick() {
     if (!gameActive) return;
     setScore(score + 1);
     moveTarget();
@@ -72,7 +71,6 @@ export default function ArcadeGame() {
 
   function submitScore() {
     fetch(`/api/scores?name=${encodeURIComponent(user)}&score=${score}`, {
-      method: "GET",
       cache: "no-store",
     })
       .then((res) => res.json())
@@ -86,40 +84,38 @@ export default function ArcadeGame() {
   return (
     <main className="min-h-screen bg-black text-[#00ffcc] font-mono p-6 flex flex-col items-center">
       <h1 className="text-4xl mb-4">CTF Arcade – Catch the Dot</h1>
-      <p className="mb-6 text-center">
-        Click the moving dot as many times as you can in 30 seconds. Beat Admin's score to win the flag.
+      <p className="mb-6 text-center max-w-xl">
+        Click the moving dot as many times as possible in 30 seconds. Try to beat Admin's high score to get the flag.
       </p>
 
       <input
         type="text"
-        placeholder="Enter your name"
+        placeholder="Enter player name"
         value={user}
         onChange={(e) => setUser(e.target.value)}
         disabled={gameActive}
-        className="mb-4 p-2 rounded bg-black border border-[#00ffcc] text-[#00ffcc] text-lg w-64"
+        className="mb-4 p-2 rounded border border-[#00ffcc] bg-black text-[#00ffcc] w-64 text-lg"
       />
 
       <button
-        className="mb-4 px-6 py-2 border border-[#00ffcc] rounded hover:bg-[#00ffcc] hover:text-black"
         onClick={startGame}
         disabled={gameActive}
+        className="mb-6 px-6 py-2 border border-[#00ffcc] rounded hover:bg-[#00ffcc] hover:text-black"
       >
         Start Game
       </button>
 
-      <div className="relative w-80 h-80 border border-[#00ffcc] rounded-md bg-black overflow-hidden select-none">
-        {/* Target Dot */}
+      <div className="relative border border-[#00ffcc] rounded-md w-80 h-80 bg-black select-none">
         {gameActive && (
           <div
-            onClick={handleClickTarget}
-            style={{ top: targetPosition.top, left: targetPosition.left }}
-            className="w-10 h-10 bg-[#00ffcc] rounded-full absolute cursor-pointer shadow-[0_0_10px_#00ffcc]"
+            onClick={handleDotClick}
+            style={{ top: targetPos.top, left: targetPos.left }}
+            className="w-10 h-10 bg-[#00ffcc] rounded-full absolute cursor-pointer shadow-[0_0_15px_#00ffcc]"
           />
         )}
 
-        {/* Displayed Score and Timer */}
         <div className="absolute bottom-2 left-2 text-sm opacity-80">
-          <p>Time Left: {timeLeft}s</p>
+          <p>Time Left: {timeLeft}</p>
           <p>Score: {score}</p>
         </div>
       </div>
@@ -131,17 +127,15 @@ export default function ArcadeGame() {
         </div>
       )}
 
-      {message && (
-        <p className="mt-4 text-sm opacity-80 max-w-xl text-center">{message}</p>
-      )}
+      {message && <p className="mt-4 max-w-xl text-center opacity-80">{message}</p>}
 
       <section className="mt-12 w-full max-w-xl">
         <h2 className="text-2xl mb-3">Leaderboard</h2>
-        <ul className="space-y-2">
-          {leaderboard.map((e, i) => (
-            <li key={i} className="flex justify-between">
-              <span>{i + 1}. {e.user}</span>
-              <span>{e.score}</span>
+        <ul>
+          {leaderboard.map((entry, i) => (
+            <li key={i} className="flex justify-between border-b border-[#00ffcc] pb-1 mb-1">
+              <span>{i + 1}. {entry.user}</span>
+              <span>{entry.score}</span>
             </li>
           ))}
         </ul>
