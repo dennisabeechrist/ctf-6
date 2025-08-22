@@ -1,25 +1,24 @@
 import { NextRequest } from "next/server";
 
-const ADMIN = { user: "Admin", score: 25 };
-const MAX_SCORE = 100; // realistic max clicks
+// Realistic high admin score for challenge
+const ADMIN = { user: "Admin", score: 30 };
+const MAX_SCORE = 100;
 
-// For demo brevity, store leaderboard in-memory.
 let leaderboard = [ADMIN];
 
-// For demo: simple HMAC-like signature with secret key (mock)
-const secretKey = "super_secret_key_ctf";
+// Secret key for token signing (naive)
+const SECRET_KEY = "hard_ctf_secret_key_2025";
 
-// Simple signature generation (simulate HMAC)
-function signScore(name: string, score: number) {
-  const raw = `${name}:${score}:${secretKey}`;
-  // Simple hash substitute: sum char codes modulo
-  let hash = 0;
-  for (const c of raw) hash = (hash + c.charCodeAt(0)) % 65536;
-  return hash.toString(16);
+// Simple naive signature generator (string sum + secret)
+function sign(name: string, score: number): string {
+  const raw = `${name}:${score}:${SECRET_KEY}`;
+  let sum = 0;
+  for (let i = 0; i < raw.length; i++) sum += raw.charCodeAt(i);
+  return sum.toString(16);
 }
 
-function verifyToken(name: string, score: number, token: string) {
-  return token === signScore(name, score);
+function verify(name: string, score: number, token: string): boolean {
+  return token === sign(name, score);
 }
 
 function addScore(user: string, score: number) {
@@ -46,27 +45,19 @@ export async function GET(req: NextRequest) {
   } else if (score > MAX_SCORE) {
     message = "Score too high, cheating suspected.";
   } else {
-    // Require a valid or empty token
-    if (token.length > 0) {
-      if (!verifyToken(name, score, token)) {
-        message = "Invalid score token.";
-      } else {
+    if (score > ADMIN.score) {
+      if (token.length === 0) {
+        message = "High score detected! Provide a valid score token!";
+      } else if (verify(name, score, token)) {
         addScore(name, score);
-        if (score > ADMIN.score) {
-          flag = "CTF{token_power_unlocks_flag}";
-          message = "Congrats! You submitted a valid score token and got the flag!";
-        } else {
-          message = "Score accepted with valid token.";
-        }
+        flag = "CTF{cryptographically_challenging_score_token}";
+        message = "Congrats! Valid token submitted, you got the flag!";
+      } else {
+        message = "Invalid score token!";
       }
     } else {
-      // No token case: accept score if below admin score (to encourage manual token)
-      if (score > ADMIN.score) {
-        message = "Score too high, supply a valid score token to get the flag.";
-      } else {
-        addScore(name, score);
-        message = "Good score! Keep trying to beat Admin.";
-      }
+      addScore(name, score);
+      message = "Score accepted! Try to beat Admin for the flag.";
     }
   }
 
