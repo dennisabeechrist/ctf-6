@@ -1,45 +1,43 @@
-// In your /app/api/scores/route.ts (for Next.js API route)
 import { NextRequest } from "next/server";
 
-const ADMIN = { user: "Admin", score: 9999 };
+const ADMIN = { user: "Admin", score: 20 };
 
-// Store leaderboard in memory for demo; replace with DB for persistence.
 let leaderboard = [ADMIN];
 
-function addScore(name: string, score: number) {
-  leaderboard = leaderboard.filter(e => e.user !== name); // Remove duplicate by name
-  leaderboard.push({ user: name, score });
-  leaderboard.sort((a, b) => b.score - a.score);
-  leaderboard = leaderboard.slice(0, 10);
+// Frontend game max time is 30s. Legit max click realistically < 50.
+// We trust only scores <= 50; reject higher scores as cheating.
+function isCheating(score: number) {
+  return score > 50;
+}
+
+function addScore(user: string, score: number) {
+  leaderboard = leaderboard.filter((e) => e.user.toLowerCase() !== user.toLowerCase());
+  leaderboard.push({ user, score });
+  leaderboard = leaderboard.sort((a, b) => b.score - a.score).slice(0, 10);
 }
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const name = url.searchParams.get("name");
   const scoreStr = url.searchParams.get("score");
-  const magic = url.searchParams.get("magic"); // Our hidden challenge param
 
   let message = "Beat Admin to get the flag!";
   let flag = undefined;
-  let note = undefined;
 
-  // Allow score manipulation for fun, but need 'magic' for flag
   if (name && scoreStr) {
     const score = Number(scoreStr);
     if (!Number.isFinite(score) || score < 0) {
       message = "Invalid score.";
+    } else if (isCheating(score)) {
+      message = "Cheating detected! Score too high.";
     } else {
       addScore(name, score);
 
-      if (score > ADMIN.score && magic === "ctf2025") {
-        flag = "CTF{score_manipulation_master}";
-        note =
-          "You found the secret! The flag is only awarded if you submit a very high score AND the hidden query param 'magic=ctf2025'.";
-        message = "Congrats, you beat Admin and found the twist!";
+      if (score > ADMIN.score && name.toLowerCase() === "admin") {
+        flag = "CTF{arcade_master_skill}";
+        message = "Congrats! You beat Admin and earned the flag!";
       } else if (score > ADMIN.score) {
-        note =
-          "You beat Admin, but something is missing…";
-        message = "Keep looking for a secret parameter or special trick!";
+        message = `Nice! You beat Admin's score. Now try playing as Admin to get the flag!`;
       }
     }
   }
@@ -48,6 +46,5 @@ export async function GET(req: NextRequest) {
     leaderboard,
     message,
     flag,
-    note,
   });
 }
