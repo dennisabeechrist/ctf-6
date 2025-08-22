@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# Hint: Scores can be manipulated through query params.
+# Try submitting a high score to beat Admin.
