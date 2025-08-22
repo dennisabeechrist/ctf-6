@@ -4,16 +4,15 @@ const ADMIN = { user: "Admin", score: 20 };
 
 let leaderboard = [ADMIN];
 
-// Frontend game max time is 30s. Legit max click realistically < 50.
-// We trust only scores <= 50; reject higher scores as cheating.
-function isCheating(score: number) {
-  return score > 50;
-}
-
 function addScore(user: string, score: number) {
-  leaderboard = leaderboard.filter((e) => e.user.toLowerCase() !== user.toLowerCase());
+  leaderboard = leaderboard.filter(e => e.user.toLowerCase() !== user.toLowerCase());
   leaderboard.push({ user, score });
   leaderboard = leaderboard.sort((a, b) => b.score - a.score).slice(0, 10);
+}
+
+function isCheating(score: number) {
+  // Set max possible clicks per 30s to something reasonable
+  return score > 50;
 }
 
 export async function GET(req: NextRequest) {
@@ -32,19 +31,21 @@ export async function GET(req: NextRequest) {
       message = "Cheating detected! Score too high.";
     } else {
       addScore(name, score);
-
       if (score > ADMIN.score && name.toLowerCase() === "admin") {
         flag = "CTF{arcade_master_skill}";
         message = "Congrats! You beat Admin and earned the flag!";
       } else if (score > ADMIN.score) {
-        message = `Nice! You beat Admin's score. Now try playing as Admin to get the flag!`;
+        message = "Nice! You beat Admin's score. Try playing as Admin to get the flag!";
       }
     }
   }
 
-  return Response.json({
-    leaderboard,
-    message,
-    flag,
-  });
+  return new Response(
+    JSON.stringify({
+      leaderboard,
+      message,
+      flag,
+    }),
+    { headers: { "Content-Type": "application/json" } }
+  );
 }
